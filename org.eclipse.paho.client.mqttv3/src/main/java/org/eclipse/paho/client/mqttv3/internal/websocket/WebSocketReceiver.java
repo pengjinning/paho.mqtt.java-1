@@ -26,7 +26,7 @@ import org.eclipse.paho.client.mqttv3.logging.LoggerFactory;
 public class WebSocketReceiver implements Runnable{
 
 	private static final String CLASS_NAME = WebSocketReceiver.class.getName();
-	private static final Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
+	private Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
 
 	private boolean running = false;
 	private boolean stopping = false;
@@ -44,6 +44,7 @@ public class WebSocketReceiver implements Runnable{
 
 	/**
 	 * Starts up the WebSocketReceiver's thread
+	 * @param threadName The name of the thread
 	 */
 	public void start(String threadName){
 		final String methodName = "start";
@@ -65,21 +66,25 @@ public class WebSocketReceiver implements Runnable{
 	public void stop() {
 		final String methodName = "stop";
 		stopping = true;
+        boolean closed = false;
 		synchronized (lifecycle) {
 			//@TRACE 850=stopping
 			log.fine(CLASS_NAME,methodName, "850");
 			if(running) {
 				running = false;
 				receiving = false;
+                closed = true;
 				closeOutputStream();
-				if( !Thread.currentThread().equals(receiverThread)) {
-					try {
-						// Wait for the thread to finish
-						receiverThread.join();
-					} catch (InterruptedException ex) {
-						// Interrupted Exception
-					}
-				}
+
+			}
+		}
+		if(closed && !Thread.currentThread().equals(receiverThread) && (receiverThread != null)) {
+			try {
+				// Wait for the thread to finish
+		        //This must not happen in the synchronized block, otherwise we can deadlock ourselves!
+				receiverThread.join();
+			} catch (InterruptedException ex) {
+				// Interrupted Exception
 			}
 		}
 		receiverThread = null;

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2014 IBM Corp.
+ * Copyright (c) 2009, 2018 IBM Corp.
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -34,7 +34,7 @@ import org.eclipse.paho.client.mqttv3.logging.LoggerFactory;
 public class Debug {
 	
 	private static final String CLASS_NAME = ClientComms.class.getName();
-	private static final Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT,CLASS_NAME);
+	private Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT,CLASS_NAME);
 	private static final String separator = "==============";
 	private static final String lineSep = System.getProperty("line.separator","\n");
 	
@@ -141,6 +141,9 @@ public class Debug {
 
 	/**
 	 * Return a set of properties as a formatted string
+	 * @param props The Dump Properties
+	 * @param name The associated name 
+	 * @return a set of properties as a formatted string
 	 */
 	public static String dumpProperties(Properties props, String name) {
 		

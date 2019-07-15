@@ -13,7 +13,6 @@
 
 package org.eclipse.paho.client.mqttv3.test;
 
-import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,7 +24,6 @@ import java.util.logging.Logger;
 import org.eclipse.paho.client.mqttv3.IMqttClient;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.MqttTopic;
@@ -51,6 +49,7 @@ public class WebSocketTest {
 
   private static URI serverURI;
   private static MqttClientFactoryPaho clientFactory;
+  private static String topicPrefix;
 
   /**
    * @throws Exception
@@ -65,6 +64,7 @@ public class WebSocketTest {
       serverURI = TestProperties.getWebSocketServerURI();
       clientFactory = new MqttClientFactoryPaho();
       clientFactory.open();
+      topicPrefix = "WebSocketTest-" + UUID.randomUUID().toString() + "-";
     }
     catch (Exception exception) {
       log.log(Level.SEVERE, "caught exception:", exception);
@@ -94,7 +94,7 @@ public class WebSocketTest {
   /**
    * @throws Exception
    */
-  @Test
+  @Test()
   public void testWebSocketConnect() throws Exception {
     String methodName = Utility.getMethodName();
     LoggingUtilities.banner(log, cclass, methodName);
@@ -131,6 +131,9 @@ public class WebSocketTest {
     }
     finally {
       if (client != null) {
+    	  if(client.isConnected()){
+    		  client.disconnectForcibly();
+    	  }
         log.info("Close...");
         client.close();
       }
@@ -148,7 +151,7 @@ public class WebSocketTest {
 
     IMqttClient client = null;
     try {
-      String topicStr = UUID.randomUUID() + "/topic" + "_02";
+      String topicStr = topicPrefix + "topic" + "_02";
       String clientId = methodName;
       client = clientFactory.createMqttClient(serverURI, clientId);
 
@@ -179,9 +182,15 @@ public class WebSocketTest {
 
       log.info("Disconnecting...");
       client.disconnect();
-    }
+    } catch (MqttException exception) {
+        log.log(Level.SEVERE, "caught exception:", exception);
+        Assert.fail("Unexpected exception: " + exception);
+      }
     finally {
       if (client != null) {
+    	  if(client.isConnected()){
+    		  client.disconnectForcibly();
+    	  }
         log.info("Close...");
         client.close();
       }
@@ -197,7 +206,7 @@ public class WebSocketTest {
    * that it recieves the same payload.
  * @throws Exception
    */
-  @Test
+  @Test(timeout=10000)
   public void largePayloadTest() throws Exception{
 	  // Generate large byte array;
 	  byte[] largeByteArray = new byte[32000];
@@ -233,10 +242,14 @@ public class WebSocketTest {
 	      log.info("Disconnecting...");
 	      client.disconnect();
 	      log.info("Disconnected...");
-	    } catch (Exception e){
-	    	e.printStackTrace();
-	    } finally {
+	    } catch (MqttException exception) {
+	        log.log(Level.SEVERE, "caught exception:", exception);
+	        Assert.fail("Unexpected exception: " + exception);
+	      } finally {
 	      if (client != null) {
+	    	  if(client.isConnected()){
+	    		  client.disconnectForcibly();
+	    	  }
 	        log.info("Close...");
 	        client.close();
 	      }
@@ -244,8 +257,40 @@ public class WebSocketTest {
 
   }
 
+  @Test(timeout=10000)
+  public void testBasicAuth() throws Exception {
+    String methodName = Utility.getMethodName();
+    LoggingUtilities.banner(log, cclass, methodName);
 
+    String userInfo = "username:password";
 
+    String clientId = methodName;
+
+    URI serverURIWithUserInfo = new URI(serverURI.getScheme(),
+            userInfo,
+            serverURI.getHost(),
+            serverURI.getPort(),
+            serverURI.getPath(),
+            serverURI.getQuery(),
+            serverURI.getFragment());
+    IMqttClient client = null;
+    try {
+     client = clientFactory.createMqttClient(serverURIWithUserInfo, clientId);
+    	client.connect();
+    	client.disconnect();
+    }catch (MqttException exception) {
+        log.log(Level.SEVERE, "caught exception:", exception);
+        Assert.fail("Unexpected exception: " + exception);
+      } finally {
+      if (client != null) {
+    	  if(client.isConnected()){
+    		  client.disconnectForcibly();
+    	  }
+        log.info("Close...");
+        client.close();
+      }
+    }
+  }
 
   // -------------------------------------------------------------
   // Helper methods/classes
@@ -303,7 +348,7 @@ public class WebSocketTest {
      * @throws Exception
      */
     public void messageArrived(String topic, MqttMessage message) throws Exception {
-      logger2.info("message arrived: " + new String(message.getPayload()) + "'");
+      logger2.info("message arrived: " + message.getId() + "'");
 
       synchronized (messages) {
         messages.add(message);

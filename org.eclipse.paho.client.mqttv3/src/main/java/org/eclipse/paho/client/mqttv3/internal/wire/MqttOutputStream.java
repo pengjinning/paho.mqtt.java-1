@@ -31,7 +31,7 @@ import org.eclipse.paho.client.mqttv3.logging.LoggerFactory;
  */
 public class MqttOutputStream extends OutputStream {
 	private static final String CLASS_NAME = MqttOutputStream.class.getName();
-	private static final Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
+	private Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
 
 	private ClientState clientState = null;
 	private BufferedOutputStream out;
@@ -65,6 +65,9 @@ public class MqttOutputStream extends OutputStream {
 
 	/**
 	 * Writes an <code>MqttWireMessage</code> to the stream.
+	 * @param message The {@link MqttWireMessage} to send
+	 * @throws IOException if an exception is thrown when writing to the output stream.
+	 * @throws MqttException if an exception is thrown when getting the header or payload
 	 */
 	public void write(MqttWireMessage message) throws IOException, MqttException {
 		final String methodName = "write";
@@ -84,8 +87,8 @@ public class MqttOutputStream extends OutputStream {
         	clientState.notifySentBytes(length);
         }		
 		
-		// @TRACE 500= sent {0}
-    	log.fine(CLASS_NAME, methodName, "500", new Object[]{message});
+		// @TRACE 529= sent {0}
+    	log.fine(CLASS_NAME, methodName, "529", new Object[]{message});
 	}
 }
 

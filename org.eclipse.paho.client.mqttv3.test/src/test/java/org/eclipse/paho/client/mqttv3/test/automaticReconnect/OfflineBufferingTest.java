@@ -1,8 +1,24 @@
+/*******************************************************************************
+ * Copyright (c) 2016, 2018 IBM Corp.
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * and Eclipse Distribution License v1.0 which accompany this distribution. 
+ *
+ * The Eclipse Public License is available at 
+ *    http://www.eclipse.org/legal/epl-v10.html
+ * and the Eclipse Distribution License is available at 
+ *   http://www.eclipse.org/org/documents/edl-v10.php.
+ *
+ *******************************************************************************/
+
 package org.eclipse.paho.client.mqttv3.test.automaticReconnect;
 
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -22,6 +38,7 @@ import org.eclipse.paho.client.mqttv3.test.utilities.MqttV3Receiver;
 import org.eclipse.paho.client.mqttv3.test.utilities.TestMemoryPersistence;
 import org.eclipse.paho.client.mqttv3.test.utilities.Utility;
 import org.eclipse.paho.client.mqttv3.util.Debug;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,8 +53,8 @@ public class OfflineBufferingTest {
 
 	private static URI serverURI;
 	private static String serverURIString;
-	private String testTopic = "OBTOPIC";
 	static ConnectionManipulationProxyServer proxy;
+	private static String topicPrefix;
 
 	@BeforeClass
 	public static void setUpBeforeClass() throws Exception {
@@ -46,8 +63,10 @@ public class OfflineBufferingTest {
 			LoggingUtilities.banner(log, cclass, methodName);
 			serverURI = TestProperties.getServerURI();
 			serverURIString = "tcp://" + serverURI.getHost() + ":" + serverURI.getPort();
+			topicPrefix = "OfflineBufferingTest-" + UUID.randomUUID().toString() + "-";
+
 			// Use 0 for the first time.
-			proxy = new ConnectionManipulationProxyServer(serverURI.getHost(), serverURI.getPort(), 0);
+			proxy = new ConnectionManipulationProxyServer(serverURI.getHost(), serverURI.getPort(), 2883);
 			proxy.startProxy();
 			while (!proxy.isPortSet()) {
 				Thread.sleep(0);
@@ -60,10 +79,14 @@ public class OfflineBufferingTest {
 
 	}
 
+	@After
+	public void clearUpAfterTest() {
+		proxy.disableProxy();
+	}
+
 	/**
-	 * Tests that A message can be buffered whilst the client is in a
-	 * disconnected state and is then delivered once the client has reconnected
-	 * automatically.
+	 * Tests that A message can be buffered whilst the client is in a disconnected
+	 * state and is then delivered once the client has reconnected automatically.
 	 */
 	@Test
 	public void testSingleMessageBufferAndDeliver() throws Exception {
@@ -86,7 +109,7 @@ public class OfflineBufferingTest {
 		// Enable Proxy & Connect to server
 		proxy.enableProxy();
 		connectToken = client.connect(options);
-		connectToken.waitForCompletion();
+		connectToken.waitForCompletion(5000);
 		boolean isConnected = client.isConnected();
 		log.info("First Connection isConnected: " + isConnected);
 		Assert.assertTrue(isConnected);
@@ -98,19 +121,19 @@ public class OfflineBufferingTest {
 		Assert.assertFalse(isConnected);
 
 		// Publish Message
-		pubToken = client.publish(testTopic + methodName, new MqttMessage(methodName.getBytes()));
+		pubToken = client.publish(topicPrefix + methodName, new MqttMessage(methodName.getBytes()));
 		log.info("Publish attempted: isComplete:" + pubToken.isComplete());
 		Assert.assertFalse(pubToken.isComplete());
 		// Enable Proxy
 		proxy.enableProxy();
-		pubToken.waitForCompletion();
+		pubToken.waitForCompletion(5000);
 
 		// Check that we are connected
 		// give it some time to reconnect
-		long currentTime = System.currentTimeMillis();
-		int timeout = 4000;
+		long currentTime = System.nanoTime();
+		long timeout = TimeUnit.SECONDS.toNanos(4);
 		while (client.isConnected() == false) {
-			long now = System.currentTimeMillis();
+			long now = System.nanoTime();
 			if ((currentTime + timeout) < now) {
 				log.warning("Timeout Exceeded");
 				break;
@@ -125,7 +148,7 @@ public class OfflineBufferingTest {
 		log.info("Message Delivered: " + pubToken.isComplete());
 		Assert.assertTrue(pubToken.isComplete());
 		IMqttToken disconnectToken = client.disconnect();
-		disconnectToken.waitForCompletion();
+		disconnectToken.waitForCompletion(5000);
 		client.close();
 		client = null;
 		proxy.disableProxy();
@@ -133,8 +156,8 @@ public class OfflineBufferingTest {
 
 	/**
 	 * Tests that multiple messages can be buffered whilst the client is in a
-	 * disconnected state and that they are all then delivered once the client
-	 * has connected automatically.
+	 * disconnected state and that they are all then delivered once the client has
+	 * connected automatically.
 	 */
 	@Test
 	public void testManyMessageBufferAndDeliver() throws Exception {
@@ -146,26 +169,31 @@ public class OfflineBufferingTest {
 
 		// Client Options
 		MqttConnectOptions options = new MqttConnectOptions();
-		options.setCleanSession(false);
+		options.setCleanSession(true);
 		options.setAutomaticReconnect(true);
+		
+		// Workaround for Issue #582 - Remove once fixed.
+		//options.setMaxInflight(100);
+		
 		MqttAsyncClient client = new MqttAsyncClient("tcp://localhost:" + proxy.getLocalPort(), methodName, DATA_STORE);
 		DisconnectedBufferOptions disconnectedOpts = new DisconnectedBufferOptions();
 		disconnectedOpts.setBufferEnabled(true);
 		client.setBufferOpts(disconnectedOpts);
 
 		// Create subscription client that won't be affected by proxy
-		MqttAsyncClient subClient = new MqttAsyncClient(serverURIString, methodName + "sub-client");
+		MemoryPersistence persistence = new MemoryPersistence();
+		MqttAsyncClient subClient = new MqttAsyncClient(serverURIString, methodName + "sub-client", persistence);
 		MqttV3Receiver mqttV3Receiver = new MqttV3Receiver(subClient, LoggingUtilities.getPrintStream());
 		subClient.setCallback(mqttV3Receiver);
 		IMqttToken subConnectToken = subClient.connect();
-		subConnectToken.waitForCompletion();
+		subConnectToken.waitForCompletion(5000);
 		// Subscribe to topic
-		subClient.subscribe(testTopic + methodName, 0);
+		subClient.subscribe(topicPrefix + methodName, 1);
 
 		// Enable Proxy & Connect to server
 		proxy.enableProxy();
 		connectToken = client.connect(options);
-		connectToken.waitForCompletion();
+		connectToken.waitForCompletion(5000);
 		boolean isConnected = client.isConnected();
 		log.info("First Connection isConnected: " + isConnected);
 		Assert.assertTrue(isConnected);
@@ -175,21 +203,23 @@ public class OfflineBufferingTest {
 		isConnected = client.isConnected();
 		log.info("Proxy Disconnect isConnected: " + isConnected);
 		Assert.assertFalse(isConnected);
+		
+		int msg_count = 100;
 
-		// Publish 100 messages
-		for (int x = 0; x < 100; x++) {
-			client.publish(testTopic + methodName, new MqttMessage(Integer.toString(x).getBytes()));
+		// Publish msg_count messages
+		for (int x = 0; x < msg_count; x++) {
+			client.publish(topicPrefix + methodName, new MqttMessage(Integer.toString(x).getBytes()));
 		}
 		// Enable Proxy
 		proxy.enableProxy();
 
 		// Check that we are connected
 		// give it some time to reconnect
-		long currentTime = System.currentTimeMillis();
-		int timeout = 8000;
+		long currentTime = System.nanoTime();
+		long timeout = TimeUnit.SECONDS.toNanos(8);
 		while (client.isConnected() == false) {
 
-			long now = System.currentTimeMillis();
+			long now = System.nanoTime();
 			if ((currentTime + timeout) < now) {
 				log.warning("Timeout Exceeded");
 				break;
@@ -203,19 +233,22 @@ public class OfflineBufferingTest {
 		log.info("Proxy Re-Enabled isConnected: " + isConnected);
 		Assert.assertTrue(isConnected);
 
+		Thread.sleep(5000);
+
 		// Check that all messages have been delivered
-		for (int x = 0; x < 100; x++) {
-			boolean recieved = mqttV3Receiver.validateReceipt(testTopic + methodName, 0, Integer.toString(x).getBytes());
+		for (int x = 0; x < msg_count; x++) {
+			boolean recieved = mqttV3Receiver.validateReceipt(topicPrefix + methodName, 1,
+					Integer.toString(x).getBytes());
 			Assert.assertTrue(recieved);
 		}
 		log.info("All messages sent and Recieved correctly.");
 		IMqttToken disconnectToken = client.disconnect();
-		disconnectToken.waitForCompletion();
+		disconnectToken.waitForCompletion(5000);
 		client.close();
 		client = null;
 
 		IMqttToken subClientDisconnectToken = subClient.disconnect();
-		subClientDisconnectToken.waitForCompletion();
+		subClientDisconnectToken.waitForCompletion(5000);
 		subClient.close();
 		subClient = null;
 
@@ -230,26 +263,27 @@ public class OfflineBufferingTest {
 	public void testDeleteOldestBufferedMessages() throws Exception {
 		String methodName = Utility.getMethodName();
 		LoggingUtilities.banner(log, cclass, methodName);
+		int maxMessages = 10;
 
 		// Tokens
 		IMqttToken connectToken;
 
 		// Client Options
 		MqttConnectOptions options = new MqttConnectOptions();
-		options.setCleanSession(false);
+		options.setCleanSession(true);
 		options.setAutomaticReconnect(true);
 		MqttAsyncClient client = new MqttAsyncClient("tcp://localhost:" + proxy.getLocalPort(), methodName, DATA_STORE);
 		DisconnectedBufferOptions disconnectedOpts = new DisconnectedBufferOptions();
 		disconnectedOpts.setBufferEnabled(true);
 		// Set buffer to 100 to save time
-		disconnectedOpts.setBufferSize(100);
+		disconnectedOpts.setBufferSize(maxMessages);
 		disconnectedOpts.setDeleteOldestMessages(true);
 		client.setBufferOpts(disconnectedOpts);
 
 		// Enable Proxy & Connect to server
 		proxy.enableProxy();
 		connectToken = client.connect(options);
-		connectToken.waitForCompletion();
+		connectToken.waitForCompletion(5000);
 		boolean isConnected = client.isConnected();
 		log.info("First Connection isConnected: " + isConnected);
 		Assert.assertTrue(isConnected);
@@ -261,13 +295,13 @@ public class OfflineBufferingTest {
 		Assert.assertFalse(isConnected);
 
 		// Publish 100 messages
-		for (int x = 0; x < 100; x++) {
-			client.publish(testTopic + methodName, new MqttMessage(Integer.toString(x).getBytes()));
+		for (int x = 0; x < maxMessages; x++) {
+			client.publish(topicPrefix + methodName, new MqttMessage(Integer.toString(x).getBytes()));
 		}
 
 		// Publish one message too many
 		log.info("About to publish one message too many");
-		client.publish(testTopic + methodName, new MqttMessage(Integer.toString(101).getBytes()));
+		client.publish(topicPrefix + methodName, new MqttMessage(Integer.toString(101).getBytes()));
 		// Make sure that the message now at index 0 in the buffer is '1'
 		// instead of '0'
 		MqttMessage messageAt0 = client.getBufferedMessage(0);
@@ -286,25 +320,26 @@ public class OfflineBufferingTest {
 	public void testNoDeleteOldestBufferedMessages() throws Exception {
 		String methodName = Utility.getMethodName();
 		LoggingUtilities.banner(log, cclass, methodName);
+		int maxMessages = 10;
 
 		// Tokens
 		IMqttToken connectToken;
 
 		// Client Options
 		MqttConnectOptions options = new MqttConnectOptions();
-		options.setCleanSession(false);
+		options.setCleanSession(true);
 		options.setAutomaticReconnect(true);
 		MqttAsyncClient client = new MqttAsyncClient("tcp://localhost:" + proxy.getLocalPort(), methodName, DATA_STORE);
 		DisconnectedBufferOptions disconnectedOpts = new DisconnectedBufferOptions();
 		disconnectedOpts.setBufferEnabled(true);
 		// Set buffer to 100 to save time
-		disconnectedOpts.setBufferSize(100);
+		disconnectedOpts.setBufferSize(maxMessages);
 		client.setBufferOpts(disconnectedOpts);
 
 		// Enable Proxy & Connect to server
 		proxy.enableProxy();
 		connectToken = client.connect(options);
-		connectToken.waitForCompletion();
+		connectToken.waitForCompletion(5000);
 		boolean isConnected = client.isConnected();
 		log.info("First Connection isConnected: " + isConnected);
 		Assert.assertTrue(isConnected);
@@ -316,13 +351,13 @@ public class OfflineBufferingTest {
 		Assert.assertFalse(isConnected);
 
 		// Publish 100 messages
-		for (int x = 0; x < 100; x++) {
-			client.publish(testTopic + methodName, new MqttMessage(Integer.toString(x).getBytes()));
+		for (int x = 0; x < maxMessages; x++) {
+			client.publish(topicPrefix + methodName, new MqttMessage(Integer.toString(x).getBytes()));
 		}
 		log.info("About to publish one message too many");
 
 		try {
-			client.publish(testTopic + methodName, new MqttMessage(Integer.toString(101).getBytes()));
+			client.publish(topicPrefix + methodName, new MqttMessage(Integer.toString(101).getBytes()));
 			client.close();
 			client = null;
 			Assert.fail("An MqttException Should have been thrown.");
@@ -358,12 +393,13 @@ public class OfflineBufferingTest {
 				persistence);
 		DisconnectedBufferOptions disconnectedOpts = new DisconnectedBufferOptions();
 		disconnectedOpts.setBufferEnabled(true);
+		disconnectedOpts.setPersistBuffer(true);
 		client.setBufferOpts(disconnectedOpts);
 
 		// Enable Proxy & Connect to server
 		proxy.enableProxy();
 		connectToken = client.connect(options);
-		connectToken.waitForCompletion();
+		connectToken.waitForCompletion(5000);
 		boolean isConnected = client.isConnected();
 		log.info("First Connection isConnected: " + isConnected);
 		Assert.assertTrue(isConnected);
@@ -380,7 +416,7 @@ public class OfflineBufferingTest {
 		Assert.assertEquals(0, keys.size());
 
 		// Publish Message
-		pubToken = client.publish(testTopic + methodName, new MqttMessage("test".getBytes()));
+		pubToken = client.publish(topicPrefix + methodName, new MqttMessage("test".getBytes()));
 		log.info("Publish attempted: isComplete:" + pubToken.isComplete());
 		Assert.assertFalse(pubToken.isComplete());
 		// Check that message is now in persistence layer
@@ -403,14 +439,17 @@ public class OfflineBufferingTest {
 	public void testUnPersistBufferedMessagesOnNewClient() throws Exception {
 		String methodName = Utility.getMethodName();
 		LoggingUtilities.banner(log, cclass, methodName);
+		int qos = 2;
 
 		// Mock up an Mqtt Message to be stored in Persistence
 		MqttMessage mqttMessage = new MqttMessage(methodName.getBytes());
-		mqttMessage.setQos(0);
-		MqttPublish pubMessage = new MqttPublish(testTopic + methodName, mqttMessage);
+		mqttMessage.setQos(qos);
+		MqttPublish pubMessage = new MqttPublish(topicPrefix + methodName, mqttMessage);
+		// If ID is not set, then the persisted message may be invalid for QoS 1 & 2
+		pubMessage.setMessageId(1);
 		final TestMemoryPersistence persistence = new TestMemoryPersistence();
 		persistence.open(null, null);
-		persistence.put("sb-0", (MqttPublish) pubMessage);
+		persistence.put("sb-1", (MqttPublish) pubMessage);
 		@SuppressWarnings("unchecked")
 		List<String> persistedKeys = Collections.list(persistence.keys());
 		log.info("There are now: " + persistedKeys.size() + " keys in persistence");
@@ -423,39 +462,47 @@ public class OfflineBufferingTest {
 		MqttV3Receiver mqttV3Receiver = new MqttV3Receiver(subClient, LoggingUtilities.getPrintStream());
 		subClient.setCallback(mqttV3Receiver);
 		IMqttToken subConnectToken = subClient.connect();
-		subConnectToken.waitForCompletion();
+		subConnectToken.waitForCompletion(5000);
 		Assert.assertTrue(subClient.isConnected());
-		IMqttToken subToken = subClient.subscribe(testTopic + methodName, 0);
-		subToken.waitForCompletion();
+		IMqttToken subToken = subClient.subscribe(topicPrefix + methodName, qos);
+		subToken.waitForCompletion(5000);
 
 		// Create Real client
 		log.info("Creating new client that uses existing persistence layer");
 		MqttConnectOptions optionsNew = new MqttConnectOptions();
 		optionsNew.setCleanSession(false);
 		MqttAsyncClient newClient = new MqttAsyncClient(serverURIString, methodName + "new-client11", persistence);
-
 		// Connect Client with existing persistence layer
 		IMqttToken newClientConnectToken = newClient.connect(optionsNew);
-		newClientConnectToken.waitForCompletion();
+		newClientConnectToken.waitForCompletion(5000);
 		Assert.assertTrue(newClient.isConnected());
 
 		// Check that message is published / delivered
-		boolean recieved = mqttV3Receiver.validateReceipt(testTopic + methodName, 0, methodName.getBytes());
+		boolean recieved = mqttV3Receiver.validateReceipt(topicPrefix + methodName, qos, methodName.getBytes());
 		Assert.assertTrue(recieved);
 		log.info("Message was successfully delivered after connect");
 
-		@SuppressWarnings("unchecked")
-		List<String> postConnectKeys = Collections.list(persistence.keys());
-		log.info("There are now: " + postConnectKeys.size() + " keys in persistence");
-		Assert.assertEquals(0, postConnectKeys.size());
+		int keycount = 0;
+		int count = 0;
+		do {
+			@SuppressWarnings("unchecked")
+			List<String> postConnectKeys = Collections.list(persistence.keys());
+			log.info("There are now: " + postConnectKeys.size() + " keys in persistence");
+			keycount = postConnectKeys.size();
+			if (keycount == 0 || ++count > 10) {
+				break;
+			}
+			Thread.sleep(100);
+		} while (keycount != 0);
+		Assert.assertEquals(0, keycount);
 
 		IMqttToken newClientDisconnectToken = newClient.disconnect();
-		newClientDisconnectToken.waitForCompletion();
+		newClientDisconnectToken.waitForCompletion(5000);
 		newClient.close();
 		newClient = null;
 
 		IMqttToken subClientDisconnectToken = subClient.disconnect();
-		subClientDisconnectToken.waitForCompletion();
+		subClientDisconnectToken.waitForCompletion(5000);
 		subClient.close();
 		subClient = null;
 

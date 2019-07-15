@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2014 IBM Corp.
+ * Copyright (c) 2009, 2018 IBM Corp.
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
@@ -32,7 +32,7 @@ import org.eclipse.paho.client.mqttv3.logging.LoggerFactory;
  * Provides a "token" based system for storing and tracking actions across 
  * multiple threads. 
  * When a message is sent, a token is associated with the message
- * and saved using the {@link #saveToken(MqttToken, MqttWireMessage)} method. Anyone interested
+ * and saved using the {@link CommsTokenStore#saveToken(MqttToken, MqttWireMessage)} method. Anyone interested
  * in tacking the state can call one of the wait methods on the token or using 
  * the asynchronous listener callback method on the operation. 
  * The {@link CommsReceiver} class, on another thread, reads responses back from 
@@ -45,7 +45,7 @@ import org.eclipse.paho.client.mqttv3.logging.LoggerFactory;
  */
 public class CommsTokenStore {
 	private static final String CLASS_NAME = CommsTokenStore.class.getName();
-	private static final Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
+	private Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
 
 	// Maps message-specific data (usually message IDs) to tokens
 	private Hashtable tokens;
@@ -102,12 +102,14 @@ public class CommsTokenStore {
 	 * Restores a token after a client restart.  This method could be called
 	 * for a SEND of CONFIRM, but either way, the original SEND is what's 
 	 * needed to re-build the token.
+	 * @param message The {@link MqttPublish} message to restore
+	 * @return {@link MqttDeliveryToken}
 	 */
 	protected MqttDeliveryToken restoreToken(MqttPublish message) {
 		final String methodName = "restoreToken";
 		MqttDeliveryToken token;
 		synchronized(tokens) {
-			String key = new Integer(message.getMessageId()).toString();
+			String key = Integer.toString(message.getMessageId());
 			if (this.tokens.containsKey(key)) {
 				token = (MqttDeliveryToken)this.tokens.get(key);
 				//@TRACE 302=existing key={0} message={1} token={2}
@@ -225,7 +227,7 @@ public class CommsTokenStore {
 	public void clear() {
 		final String methodName = "clear";
 		//@TRACE 305=> {0} tokens
-		log.fine(CLASS_NAME, methodName, "305", new Object[] {new Integer(tokens.size())});
+		log.fine(CLASS_NAME, methodName, "305", new Object[] {Integer.valueOf(tokens.size())});
 		synchronized(tokens) {
 			tokens.clear();
 		}

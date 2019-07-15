@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PipedInputStream;
 import java.nio.ByteBuffer;
+import java.util.Properties;
 
 import javax.net.SocketFactory;
 
@@ -32,11 +33,12 @@ import org.eclipse.paho.client.mqttv3.logging.LoggerFactory;
 public class WebSocketNetworkModule extends TCPNetworkModule {
 	
 	private static final String CLASS_NAME = WebSocketNetworkModule.class.getName();
-	private static final Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
+	private Logger log = LoggerFactory.getLogger(LoggerFactory.MQTT_CLIENT_MSG_CAT, CLASS_NAME);
 		
 	private String uri;
 	private String host;
 	private int port;
+	private Properties customWebsocketHeaders;
 	private PipedInputStream pipedInputStream;
 	private WebSocketReceiver webSocketReceiver;
 	ByteBuffer recievedPayload;
@@ -46,27 +48,14 @@ public class WebSocketNetworkModule extends TCPNetworkModule {
 	 * This allows us to encode the MQTT payload into a WebSocket
 	 *  Frame before passing it through to the real socket.
 	 */
-	private ByteArrayOutputStream outputStream = new ByteArrayOutputStream(){
-		
-		public void flush() throws IOException {
-			final ByteBuffer byteBuffer;
-			synchronized (this) {
-				byteBuffer = ByteBuffer.wrap(toByteArray());
-				reset();
-			}
-			WebSocketFrame frame = new WebSocketFrame((byte)0x02, true, byteBuffer.array());
-			byte[] rawFrame = frame.encodeFrame();
-			getSocketOutputStream().write(rawFrame);
-			getSocketOutputStream().flush();
-			
-		}
-	};
-	
-	public WebSocketNetworkModule(SocketFactory factory, String uri, String host, int port, String resourceContext){
+	private ByteArrayOutputStream outputStream = new ExtendedByteArrayOutputStream(this);
+
+	public WebSocketNetworkModule(SocketFactory factory, String uri, String host, int port, String resourceContext, Properties customWebsocketHeaders){
 		super(factory, host, port, resourceContext);
 		this.uri = uri;
 		this.host = host;
 		this.port = port;
+		this.customWebsocketHeaders = customWebsocketHeaders;
 		this.pipedInputStream = new PipedInputStream();
 		
 		log.setResourceName(resourceContext);
@@ -74,17 +63,17 @@ public class WebSocketNetworkModule extends TCPNetworkModule {
 	
 	public void start() throws IOException, MqttException {
 		super.start();
-		WebSocketHandshake handshake = new WebSocketHandshake(getSocketInputStream(), getSocketOutputStream(), uri, host, port);
+		WebSocketHandshake handshake = new WebSocketHandshake(getSocketInputStream(), getSocketOutputStream(), uri, host, port, customWebsocketHeaders);
 		handshake.execute();
 		this.webSocketReceiver = new WebSocketReceiver(getSocketInputStream(), pipedInputStream);
 		webSocketReceiver.start("webSocketReceiver");
 	}
 	
-	private OutputStream getSocketOutputStream() throws IOException {
+	OutputStream getSocketOutputStream() throws IOException {
 		return super.getOutputStream();
 	}
 	
-	private InputStream getSocketInputStream() throws IOException {
+	InputStream getSocketInputStream() throws IOException {
 		return super.getInputStream();
 	}
 	

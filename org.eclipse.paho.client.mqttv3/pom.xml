@@ -4,26 +4,26 @@
 	<parent>
 		<groupId>org.eclipse.paho</groupId>
 		<artifactId>java-parent</artifactId>
-		<version>1.1.0</version>
+		<version>1.2.1</version>
 	</parent>
 
 	<artifactId>org.eclipse.paho.client.mqttv3</artifactId>
 	<packaging>eclipse-plugin</packaging>
-	
-	<profiles>
-		<profile>
-			<id>doclint-java8-disable</id>
-	    		<activation>
-				<jdk>[1.8,)</jdk>
-			</activation>
-			<properties>
-				<javadoc.opts>-Xdoclint:none</javadoc.opts>
-			</properties>
-		</profile>
-	</profiles>
 
 	<build>
 		<plugins>
+			<plugin>
+ 				<groupId>org.jacoco</groupId>
+				  	<artifactId>jacoco-maven-plugin</artifactId>
+					<version>${jacoco.version}</version>
+					<executions>
+						<execution>
+							<goals>
+								<goal>prepare-agent</goal>
+							</goals>
+						</execution>
+					</executions>
+				</plugin>
 			<plugin>
 				<groupId>org.eclipse.tycho</groupId>
 				<artifactId>tycho-maven-plugin</artifactId>
@@ -31,7 +31,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>templating-maven-plugin</artifactId>
-				<version>1.0-alpha-3</version>
+				<version>1.0.0</version>
 				<executions>
 					<execution>
 						<id>filter-src</id>
@@ -44,7 +44,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-resources-plugin</artifactId>
-				<version>2.4.2</version>
+				<version>3.0.2</version>
 				<executions>
 					<execution>
 						<id>default-copy-resources</id>
@@ -71,44 +71,32 @@
 			<plugin>
 				<groupId>org.eclipse.tycho</groupId>
 				<artifactId>tycho-compiler-plugin</artifactId>
-				<version>0.20.0</version>
+				<version>${tycho.version}</version>
 				<configuration>
 					<source>${mqttclient.java.version}</source>
 					<target>${mqttclient.java.version}</target>
 				</configuration>
 			</plugin>
-			<!-- <plugin>
+				 
+			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-javadoc-plugin</artifactId>
-				<version>2.10.3</version>
+				<version>${javadoc.version}</version>
 				<executions>
 					<execution>
 						<id>attach-javadocs</id>
 						<goals>
+							<goal>javadoc-no-fork</goal>
 							<goal>jar</goal>
 						</goals>
 						<configuration>
-                					<additionalparam>${javadoc.opts}</additionalparam>
-            					</configuration>
+                			<additionalparam>${javadoc.opts}</additionalparam>
+            			</configuration>
 					</execution>
 				</executions>
 			</plugin>
-			<plugin>
-				<groupId>org.eclipse.tycho.extras</groupId>
-				<artifactId>tycho-document-bundle-plugin</artifactId>
-		        <executions>
-					<execution>
-						<id>javadoc</id>
-						<goals>
-							<goal>javadoc</goal>
-						</goals>
-						<configuration>
-						<javadocOptions>-sourcepath src/main/java:src/main/java-templates org.eclipse.paho.client.mqttv3	</javadocOptions>
-						</configuration>
-					</execution>
-				</executions>     
-			</plugin> -->
 		</plugins>
+		
 		<pluginManagement>
 			<plugins> 
 				<!--This plugin's configuration is used to store Eclipse m2e settings only. It has no influence on the Maven build itself.-->
@@ -145,4 +133,5 @@
 			</plugins>
 		</pluginManagement>
 	</build>
+<version>1.2.1</version>
 </project>

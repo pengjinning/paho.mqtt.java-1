@@ -20,29 +20,29 @@ package org.eclipse.paho.client.mqttv3.internal.wire;
  * specification.
  */
 public class MultiByteInteger {
-	private long value;
+	private int value;
 	private int length;
 	
-	public MultiByteInteger(long value) {
+	public MultiByteInteger(int value) {
 		this(value, -1);
 	}
 	
-	public MultiByteInteger(long value, int length) {
+	public MultiByteInteger(int value, int length) {
 		this.value = value;
 		this.length = length;
 	}
 	
 	/**
-	 * Returns the number of bytes read when decoding this MBI.
+	 * @return the number of bytes read when decoding this MBI.
 	 */
 	public int getEncodedLength() {
 		return length;
 	}
 
 	/**
-	 * Returns the value of this MBI.
+	 * @return the value of this MBI.
 	 */
-	public long getValue() {
+	public int getValue() {
 		return value;
 	}
 }

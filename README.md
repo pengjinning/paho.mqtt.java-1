@@ -1,5 +1,5 @@
 # Eclipse Paho Java Client
-[![Build Status](https://travis-ci.org/eclipse/paho.mqtt.java.svg?branch=master)](https://travis-ci.org/eclipse/paho.mqtt.java)
+[![Build Status](https://travis-ci.org/eclipse/paho.mqtt.java.svg?branch=develop)](https://travis-ci.org/eclipse/paho.mqtt.java)
 
 The Paho Java Client is an MQTT client library written in Java for developing applications that run on the JVM or other Java compatible platforms such as Android
 
@@ -31,7 +31,9 @@ Eclipse hosts a Nexus repository for those who want to use Maven to manage their
 Add the repository definition and the dependency definition shown below to your pom.xml.
 
 Replace %REPOURL% with either ``` https://repo.eclipse.org/content/repositories/paho-releases/ ``` for the official releases, or ``` https://repo.eclipse.org/content/repositories/paho-snapshots/  ``` for the nightly snapshots. Replace %VERSION% with the level required .
-The latest release version is ```1.1.0``` and the current snapshot version is ```1.1.1-SNAPSHOT```.
+
+The latest release version is ```1.2.1``` and the current snapshot version is ```1.2.2-SNAPSHOT```.
+
 
 ```
 <project ...>

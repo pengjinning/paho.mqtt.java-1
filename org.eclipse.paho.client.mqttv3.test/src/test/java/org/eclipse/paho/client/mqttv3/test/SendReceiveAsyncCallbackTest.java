@@ -16,6 +16,7 @@ package org.eclipse.paho.client.mqttv3.test;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -48,9 +49,10 @@ public class SendReceiveAsyncCallbackTest {
 	private static URI serverURI;
 	private static MqttClientFactoryPaho clientFactory;
 	private boolean testFinished = false;
-	private String topicFilter = "SendReceiveAsyncCallback/topic";
+	private static String topicFilter;
 	private listener myListener = new listener();
 	private onPublish myOnPublish = new onPublish(1);
+	private static String topicPrefix;
 
 	/**
 	 * @throws Exception
@@ -65,6 +67,9 @@ public class SendReceiveAsyncCallbackTest {
 			serverURI = TestProperties.getServerURI();
 			clientFactory = new MqttClientFactoryPaho();
 			clientFactory.open();
+		    topicPrefix = "SendReceiveAsyncCallbackTest-" + UUID.randomUUID().toString() + "-";
+		    topicFilter = topicPrefix + "SendReceiveAsyncCallback/topic";
+
 		} catch (Exception exception) {
 			log.log(Level.SEVERE, "caught exception:", exception);
 			throw exception;
@@ -148,15 +153,18 @@ public class SendReceiveAsyncCallbackTest {
 
 		public void messageArrived(String topic, MqttMessage message)
 				throws Exception {
-
-			log.info("message arrived: '" + new String(message.getPayload())
+			String msgstr = new String(message.getPayload());
+			log.info("message arrived: '" + msgstr
 					+ "' " + this.hashCode() + " "
 					+ (message.isDuplicate() ? "duplicate" : ""));
 
 			if (!message.isDuplicate()) {
 				synchronized (messages) {
-					messages.add(message);
-					messages.notifyAll();
+					if (!msgstr.equals("might cancel")) {
+						log.info("add message");
+						messages.add(message);
+						messages.notifyAll();
+					}
 				}
 			}
 		}
@@ -185,6 +193,16 @@ public class SendReceiveAsyncCallbackTest {
 						token.getClient().publish(topicFilter, "my data".getBytes(), 2, false, null, myOnPublish);
 					}
 					else {
+						IMqttDeliveryToken tokenToRemove1 = token.getClient().publish(topicFilter, "might cancel".getBytes(), 1, false, null, myOnPublish);
+						boolean res1_1 = token.getClient().removeMessage(tokenToRemove1);
+						Assert.assertTrue("message (QoS1) removed", res1_1);
+						boolean res1_2 = token.getClient().removeMessage(tokenToRemove1);
+						Assert.assertFalse("already removed message (QoS1) shoudn't be removed", res1_2);
+						IMqttDeliveryToken tokenToRemove2 = token.getClient().publish(topicFilter, "might cancel".getBytes(), 2, false, null, myOnPublish);
+						boolean res2_1 = token.getClient().removeMessage(tokenToRemove2);
+						Assert.assertTrue("message (QoS2) removed", res2_1);
+						boolean res2_2 = token.getClient().removeMessage(tokenToRemove2);
+						Assert.assertFalse("already removed message (QoS2) shoudn't be removed", res2_2);
 						log.info(methodName + ": all messages published");
 						testFinished = true;
 					}
@@ -290,7 +308,7 @@ public class SendReceiveAsyncCallbackTest {
 	 * 
 	 * @throws Exception
 	 */
-	@Test
+	@Test(timeout=10000)
 	public void test1() throws Exception {
 		final String methodName = Utility.getMethodName();
 		LoggingUtilities.banner(log, cclass, methodName);
